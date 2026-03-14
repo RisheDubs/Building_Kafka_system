@@ -1,0 +1,33 @@
+What is kafka?
+Apache Kafka is a distributed, high-throughput, and low-latency 
+streaming platform designed to ingest and process real-time data 
+feeds. It acts as a central, fault-tolerant message broker, allowing
+systems to decouple data sources from consumers. Kafka is essential 
+for handling massive data volumes, enabling real-time analytics, 
+event sourcing, and complex data pipelines across distributed systems.
+
+Key Components:
+Producers: Applications that create and send data (messages) to Kafka.
+Consumers: Applications that subscribe to and process these data streams.
+Topics: Channels where messages are stored, acting as folders for data categorization.
+Brokers: Servers that make up the Kafka cluster, handling the storage and distribution of data. 
+
+Why Do We Need Kafka?
+Kafka solves the complexities of connecting multiple, fast-moving data sources with multiple, 
+slow-moving consumers, particularly in modern microservices architectures. 
+Decoupling Systems: Instead of direct, complex point-to-point connections, systems send data to Kafka 
+and consumers read from it, reducing dependency.
+High Throughput & Speed: It can handle millions of messages per second with minimal latency.
+Scalability: The architecture allows horizontal scaling across multiple servers, making it suitable for 
+growing data demands.
+Fault Tolerance & Durability: Kafka stores data on disk and replicates it across multiple nodes, ensuring 
+data is not lost if a server fails.
+Real-Time Data Processing: It is designed for immediate processing of streaming data, essential for 
+applications like fraud detection, live monitoring, and IoT. 
+
+Common Use Cases
+Messaging: Replacing traditional message brokers with higher throughput.
+Website Activity Tracking: Real-time tracking of user clicks, searches, and actions.
+Log Aggregation: Collecting logs from multiple services and centralizing them.
+Event Sourcing & Stream Processing: Building real-time applications that respond to state changes.
+CDC (Change Data Capture): Propagating database changes in real-time to other systems.

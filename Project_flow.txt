@@ -1,0 +1,8 @@
+1. Set up the project structure
+2. Create the core protocol layer
+3. Implementing Zookeeper Integration
+4. Building the storage layer
+5. Build the broker
+6. Develop the client Library
+7. Building the higher level consumer and API.
+8. Test the system.

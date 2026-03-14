@@ -1,0 +1,52 @@
+<?xml version = "1.0" encoding ="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.simpleKafka</groupId>
+    <artifactId>simple-Kafka</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+<!-- configuration variables for the build -->
+    <properties>
+        <!-- runs on java 11 run time, which means any future java runtimes such as 17 would fail -->
+        <maven.compiler.source>11</maven.compiler.source><!--Java lang version allowed -->
+        <maven.compiler.target>11</maven.compiler.target><!-- JVM version the compiled code runs on -->
+    </properties>
+
+<!-- external libararies our project needs -->
+    <dependencies>
+        <dependency><!-- represents one external library, here apache zookeeper-->
+            <groupId>org.apache.zookeeper</groupId>
+            <artifactId>zookeeper</artifactId>
+            <version>3.8.1</version>
+        </dependency>
+    </dependencies>
+
+    <build> <!-- This defines how maven builds this project. It contains plugins, resources, and build coniguration -->
+    <plugins>
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-shade-plugin</artifactId><!--creating fat jar-->
+            <version>3.4.1</version>
+            <executions><!--Defines when the plugin should run during Maven Lifecycle-->
+                <execution><!-- Defines one run of the plugin-->
+                    <phase>package</phase>
+                    <goals><!-- task performed by the plugin-->
+                        <goal>shade</goal><!--shade - cobine dependecies into one jar-->
+                    </goals>
+                    <configuration><!-- shows how the plugins behave-->
+                        <transformers>
+                            <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                <mainClass>com.simpleKafka.broker.SimpleKafkaBroker</mainClass> <!--Entry point of the program-->                           
+                            </transformer>
+                            <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
+                        </transformers>
+                    </configuration>
+                </execution>
+            </executions>
+        </plugin>
+    </plugins>
+    </build>
+</project>
