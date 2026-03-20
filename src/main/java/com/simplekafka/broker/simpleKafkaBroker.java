@@ -6,6 +6,11 @@
 * listen to cluster changes
 */
 
+package com.simplekafka.broker;
+
+import java.util.List;
+
+
 public class SimpleKafkaBroker{
 
     private final int brokerId;
@@ -27,6 +32,7 @@ public class SimpleKafkaBroker{
         registerBroker();
         watchBroker();
         electController();
+        watchChildren();
     }
 
     //Registering broker
@@ -34,13 +40,33 @@ public class SimpleKafkaBroker{
         String path = "/brokers/" + brokerId;
         String data = host + ":" + port;
 
-        zkClient.createEphemeralNodes(path,data);
-        System.out.println(:"Broker registered: "+path);
+        zkClient.createEphemeralNode(path,data);
+        System.out.println("Broker registered: "+ path);
+    }
+
+    public interface ChildrenCallback {
+        void onChildrenChanged(List<String> children);
+    }
+
+    // Watching child nodes
+    public void watchChildren(String path, ChildrenCallback callback) {
+        try {
+            List<String> children = zooKeeper.getChildren(path, event -> {
+                if (event.getType() == Watcher.Event.EventType.NodeChildrenChanged) {
+                    watchChildren(path, callback); // re-register watcher
+                }
+            });
+
+            callback.onChildrenChanged(children);
+
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Failed to watch children for path: " + path, e);
+        }
     }
 
     //watcher for brokers
     //this shows which brokers are alive
-    private void watchBrokers(){
+    private void watchBroker(){
         zkClient.watchChildren("/brokers", children -> {
             System.out.println("Active brokers: " + children);
         });
