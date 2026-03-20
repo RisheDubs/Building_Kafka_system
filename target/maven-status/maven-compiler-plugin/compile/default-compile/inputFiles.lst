@@ -1,4 +1,4 @@
 C:\Users\RadiumPCs\Documents\Projects\Building_Kafka_system_from_scratch\src\main\java\com\simplekafka\broker\BrokerInfo.java
 C:\Users\RadiumPCs\Documents\Projects\Building_Kafka_system_from_scratch\src\main\java\com\simplekafka\broker\Protocol.java
-C:\Users\RadiumPCs\Documents\Projects\Building_Kafka_system_from_scratch\src\main\java\com\simplekafka\broker\simpleKafkaBroker.java
-C:\Users\RadiumPCs\Documents\Projects\Building_Kafka_system_from_scratch\src\main\java\com\simplekafka\broker\ZookeeperClient.java
+C:\Users\RadiumPCs\Documents\Projects\Building_Kafka_system_from_scratch\src\main\java\com\simplekafka\broker\SimpleKafkaBroker.java
+C:\Users\RadiumPCs\Documents\Projects\Building_Kafka_system_from_scratch\src\main\java\com\simplekafka\broker\ZooKeeperClient.java
