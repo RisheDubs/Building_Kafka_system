@@ -1,0 +1,5 @@
+com\simplekafka\broker\Protocol.class
+com\simplekafka\broker\BrokerInfo.class
+com\simplekafka\broker\SimpleKafkaBroker.class
+com\simplekafka\broker\ZooKeeperClient.class
+com\simplekafka\broker\ZooKeeperClient$ChildrenCallback.class
