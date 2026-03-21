@@ -21,8 +21,12 @@ public class ZooKeeperClient implements Watcher {
         return "localhost:2181";
     }
 
+    public interface ChildrenCallback {
+        void onChildrenChanged(List<String> children);
+    }
+
     // CONNECT
-    public void connect() throws IOException, InterruptedException {
+    public void connect() throws IOException, InterruptedException, KeeperException {
         zooKeeper = new ZooKeeper(getConnectionString(), SESSION_TIMEOUT, this);
         connectedSignal.await();
 
@@ -72,4 +76,20 @@ public class ZooKeeperClient implements Watcher {
             LOGGER.info("Connected to ZooKeeper");
         }
     }
+
+    // WATCH CHILD NODES
+    public void watchChildren(String path, ChildrenCallback callback) {
+        try {
+            List<String> children = zooKeeper.getChildren(path, event -> {
+                if (event.getType() == Watcher.Event.EventType.NodeChildrenChanged) {
+                    watchChildren(path, callback); // re-register watcher
+                }
+            });
+
+            callback.onChildrenChanged(children);
+
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Failed to watch children for path: " + path, e);
+        }
+}   
 }
