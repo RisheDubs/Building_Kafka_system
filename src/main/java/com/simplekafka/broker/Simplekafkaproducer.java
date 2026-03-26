@@ -1,204 +1,228 @@
 package com.simplekafka.client;
 
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Level;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Random;
 import java.util.logging.Logger;
+import java.util.Collections;
 
 /**
  * WHAT IS THIS?
  *
- * SimpleKafkaProducer is the high-level producer API — the thing a real
- * application would use. It sits on top of SimpleKafkaClient and adds:
+ * SimpleKafkaProducer is the high-level producer API described in Stage 7.
+ * It wraps SimpleKafkaClient and adds two things the raw client doesn't have:
  *
- *   1. AUTOMATIC PARTITION SELECTION (round-robin)
- *      You just say "send this to topic X" — the producer decides which
- *      partition. Real Kafka does the same unless you specify a key.
+ *   1. STRING SERIALIZATION
+ *      The raw client works with byte[]. This class converts Strings to
+ *      UTF-8 bytes so callers don't have to think about encoding.
  *
- *   2. TOPIC AUTO-CREATION
- *      If the topic doesn't exist yet, the producer creates it.
- *      Real Kafka has a config for this: auto.create.topics.enable
+ *   2. AUTOMATIC PARTITION SELECTION
+ *      Two send() variants:
+ *        send(message)            → picks a RANDOM partition
+ *        send(message, partition) → sends to a SPECIFIC partition
  *
- *   3. SEND LOOP WITH RETRY
- *      Wraps the raw send() in error handling so one bad message
- *      doesn't crash the whole producer.
+ * WHY TWO SEND VARIANTS?
  *
- *   4. RUNNABLE AS A STANDALONE PROCESS
- *      main() reads from args so you can run it from the terminal:
- *      java ... SimpleKafkaProducer localhost 9091 test-topic
+ *   - Random partition: good for load balancing. Messages spread evenly.
+ *     Use this when order between messages doesn't matter.
  *
- * RELATIONSHIP TO SIMPLEKAFKACLIENT:
+ *   - Specific partition: good for ordering. All messages for the same
+ *     customer/order/key go to the same partition, guaranteeing order.
+ *     In real Kafka, you'd hash a key to get the partition number.
  *
- *   SimpleKafkaClient    <- raw protocol layer (bytes in, bytes out)
+ * LAYERED DESIGN:
+ *
+ *   SimpleKafkaClient      ← raw bytes over TCP (Stage 6)
  *         ^
- *   SimpleKafkaProducer  <- this class, friendly API layer
- *
- * PARTITION SELECTION:
- *
- * Real Kafka uses a partitioner to decide which partition a message goes to:
- *   - If message has a KEY -> hash(key) % numPartitions  (same key -> same partition)
- *   - If no key            -> round-robin across partitions
- *
- * We don't implement keys here, so we use round-robin with an AtomicInteger
- * counter that increments on every send.
- *
- * AtomicInteger is thread-safe — if you ever send from multiple threads,
- * the counter won't get corrupted.
+ *   SimpleKafkaProducer    ← strings, partition selection (Stage 7, this file)
+ *         ^
+ *   Your application code  ← just calls producer.send("hello")
  */
 public class SimpleKafkaProducer {
 
     private static final Logger LOGGER = Logger.getLogger(SimpleKafkaProducer.class.getName());
 
     // ─────────────────────────────────────────────
-    // CONSTANTS
-    // ─────────────────────────────────────────────
-
-    /** Default number of partitions when auto-creating a topic */
-    private static final int DEFAULT_NUM_PARTITIONS = 3;
-
-    /** Default replication factor when auto-creating a topic */
-    private static final short DEFAULT_REPLICATION_FACTOR = 1;
-
-    /** How long to wait between messages in the demo send loop (ms) */
-    private static final int SEND_INTERVAL_MS = 1000;
-
-    // ─────────────────────────────────────────────
     // FIELDS
     // ─────────────────────────────────────────────
 
+    /** The underlying raw client — does the actual TCP work */
     private final SimpleKafkaClient client;
-    private final String topicName;
-    private final int numPartitions;
 
-    /**
-     * Round-robin partition counter.
-     * send() does: partitionId = counter.getAndIncrement() % numPartitions
-     *
-     * e.g. with 3 partitions: 0, 1, 2, 0, 1, 2, 0, 1, 2 ...
-     * This spreads messages evenly across all partitions.
-     */
-    private final AtomicInteger partitionCounter;
+    /** Topic this producer writes to — set once at construction */
+    private final String topic;
+
+    /** Used for random partition selection in send(String message) */
+    private final Random random;
 
     // ─────────────────────────────────────────────
     // CONSTRUCTOR
     // ─────────────────────────────────────────────
 
     /**
-     * @param brokerHost    bootstrap broker hostname
-     * @param brokerPort    bootstrap broker port
-     * @param topicName     topic to produce to (will be auto-created if missing)
-     * @param numPartitions how many partitions to create if auto-creating
+     * Creates a producer for a single topic.
+     *
+     * NOTE: Unlike the consumer, the producer doesn't take a partition here —
+     * it selects partitions dynamically on each send() call.
+     *
+     * @param bootstrapBroker  hostname of any broker in the cluster
+     * @param bootstrapPort    port of that broker
+     * @param topic            the topic to produce messages to
      */
-    public SimpleKafkaProducer(String brokerHost, int brokerPort,
-                                String topicName, int numPartitions) throws Exception {
-        this.client           = new SimpleKafkaClient(brokerHost, brokerPort);
-        this.topicName        = topicName;
-        this.numPartitions    = numPartitions;
-        this.partitionCounter = new AtomicInteger(0);
+    public SimpleKafkaProducer(String bootstrapBroker, int bootstrapPort, String topic) {
+        this.client = new SimpleKafkaClient(bootstrapBroker, bootstrapPort);
+        this.topic  = topic;
+        this.random = new Random();
+    }
 
-        // Initialize the underlying client (loads metadata)
+    /**
+     * Exposes the topic metadata cache so higher-level classes
+     * (like SimpleKafkaProducer) can read partition counts.
+     *
+     * Returns an unmodifiable view so callers can't accidentally
+     * corrupt the cache.
+    */
+    public Map<String, TopicMetadata> getTopicMetadataCache() {
+        return Collections.unmodifiableMap(topicMetadataCache);
+    }
+
+    // ─────────────────────────────────────────────
+    // LIFECYCLE
+    // ─────────────────────────────────────────────
+
+    /**
+     * Connects the underlying client and loads metadata.
+     * Must be called before send().
+     */
+    public void initialize() throws IOException {
         client.initialize();
+        LOGGER.info("Producer initialized for topic: " + topic);
     }
 
     // ─────────────────────────────────────────────
-    // START
+    // SEND TO RANDOM PARTITION
     // ─────────────────────────────────────────────
 
     /**
-     * Sets up the topic and prepares to produce.
-     * Ensures the topic exists before we try to send anything.
-     */
-    public void start() throws Exception {
-        ensureTopicExists();
-    }
-
-    /**
-     * Creates the topic if it doesn't already exist.
+     * Sends a message to a randomly selected partition.
      *
-     * We use try/catch here because the broker logs a warning
-     * (not an exception) if the topic already exists.
+     * STEP BY STEP (as described in the blog):
+     *   1. Retrieve metadata for the topic (from client's cache or the broker)
+     *   2. Verify the topic exists — throw IOException if not
+     *   3. Calculate the number of partitions available
+     *   4. Select a random partition
+     *   5. Call the partition-specific send method
+     *
+     * WHY RANDOM (not round-robin)?
+     * Both achieve load balancing. Random is simpler to implement.
+     * Round-robin (using AtomicInteger) is slightly more even over time.
+     * Real Kafka uses "sticky partitioning" — picks one partition and
+     * sticks with it until a batch is full, then switches. Reduces latency.
+     *
+     * @param message  the string message to send
+     * @return         the offset where this message was stored
+     * @throws IOException if the topic doesn't exist or send fails
      */
-    private void ensureTopicExists() {
-        try {
-            client.createTopic(topicName, numPartitions, DEFAULT_REPLICATION_FACTOR);
-            LOGGER.info("Topic ready: " + topicName
-                    + " (" + numPartitions + " partitions)");
-        } catch (Exception e) {
-            // Topic might already exist — that's fine
-            LOGGER.info("Topic may already exist: " + topicName + " — " + e.getMessage());
-        }
+    public long send(String message) throws IOException {
+        // Step 1 & 2: Get topic metadata (throws if topic unknown)
+        SimpleKafkaClient.TopicMetadata topicMeta = getTopicMetadataOrThrow();
+
+        // Step 3: How many partitions does this topic have?
+        int numPartitions = topicMeta.partitionCount();
+
+        // Step 4: Pick a random partition
+        int partition = random.nextInt(numPartitions);
+
+        // Step 5: Delegate to the specific-partition send
+        return send(message, partition);
     }
 
     // ─────────────────────────────────────────────
-    // SEND
+    // SEND TO SPECIFIC PARTITION
     // ─────────────────────────────────────────────
 
     /**
-     * Sends a single message to the topic.
-     * Automatically selects the partition using round-robin.
+     * Sends a message to a specific partition.
      *
-     * @param message  raw bytes to send
-     * @return         the offset assigned to this message, or -1 on failure
+     * STEP BY STEP (as described in the blog):
+     *   1. Convert the message string to UTF-8 bytes
+     *   2. Use the client to send the data to the specified topic and partition
+     *   3. Return the offset where the message was written
+     *
+     * USE THIS WHEN:
+     *   - You want all messages for a specific key/user/order on the same partition
+     *   - You need ordering guarantees (partition order is guaranteed in Kafka)
+     *   - You're manually implementing key-based routing:
+     *       int partition = Math.abs(key.hashCode()) % numPartitions;
+     *       producer.send(message, partition);
+     *
+     * @param message    the string message to send
+     * @param partition  which partition to write to
+     * @return           the offset where this message was stored
      */
-    public long send(byte[] message) {
-        // Pick the next partition in round-robin order
-        int partitionId = partitionCounter.getAndIncrement() % numPartitions;
+    public long send(String message, int partition) throws IOException {
+        // Step 1: String → UTF-8 bytes
+        // Always use UTF-8 explicitly — default charset varies by JVM/OS
+        byte[] data = message.getBytes(StandardCharsets.UTF_8);
 
-        try {
-            long offset = client.send(topicName, partitionId, message);
-            LOGGER.info("Sent to " + topicName + "-" + partitionId
-                    + " @ offset " + offset
-                    + " | msg: " + new String(message));
-            return offset;
+        // Step 2: Send via the raw client
+        long offset = client.send(topic, partition, data);
 
-        } catch (Exception e) {
-            LOGGER.log(Level.WARNING,
-                    "Failed to send to " + topicName + "-" + partitionId, e);
-            return -1;
-        }
-    }
-
-    /** Convenience overload — send a String message */
-    public long send(String message) {
-        return send(message.getBytes());
+        // Step 3: Return the assigned offset
+        LOGGER.info("Sent to " + topic + "-" + partition + " @ offset " + offset);
+        return offset;
     }
 
     // ─────────────────────────────────────────────
-    // DEMO: CONTINUOUS SEND LOOP
+    // CLOSE
     // ─────────────────────────────────────────────
 
     /**
-     * Sends numbered messages in a loop until interrupted.
-     * Used for manual testing — you can watch offsets climb in real time.
+     * Releases resources held by this producer.
      *
-     * In a real application you'd call send(message) directly from your
-     * business logic instead of using this loop.
+     * In this implementation there's nothing to close explicitly
+     * (connections are opened/closed per-request in SimpleKafkaClient).
+     *
+     * In a production implementation this would:
+     *   - Flush any buffered/batched messages
+     *   - Close persistent connections to brokers
+     *   - Shut down background threads (e.g. a batching thread)
+     *
+     * It's still good practice to call close() — future improvements
+     * to the client won't require changes to calling code.
      */
-    public void startSendLoop() throws InterruptedException {
-        System.out.println("Starting producer loop for topic: " + topicName);
-        System.out.println("Press Ctrl+C to stop.\n");
-
-        int messageNumber = 0;
-
-        while (!Thread.currentThread().isInterrupted()) {
-            String payload = "message-" + messageNumber;
-            long offset = send(payload);
-
-            if (offset >= 0) {
-                System.out.println("[SENT] #" + messageNumber
-                        + " -> partition " + (messageNumber % numPartitions)
-                        + " @ offset " + offset
-                        + " | \"" + payload + "\"");
-            } else {
-                System.out.println("[FAIL] #" + messageNumber + " — send failed");
-            }
-
-            messageNumber++;
-            Thread.sleep(SEND_INTERVAL_MS);
-        }
+    public void close() {
+        LOGGER.info("Producer closed for topic: " + topic);
+        // Future: flush batches, close connections
     }
 
     // ─────────────────────────────────────────────
-    // MAIN — run as a standalone process
+    // PRIVATE HELPERS
+    // ─────────────────────────────────────────────
+
+    /**
+     * Gets cached topic metadata from the client, or fetches it from the broker.
+     * Throws IOException if the topic doesn't exist anywhere.
+     *
+     * We fetch partition 0's metadata first — this also populates the cache
+     * for the topic so partitionCount() works.
+     */
+    private SimpleKafkaClient.TopicMetadata getTopicMetadataOrThrow() throws IOException {
+        // Ensure partition 0 metadata is loaded (which also caches the topic)
+        client.fetchMetadata(topic, 0);
+
+        SimpleKafkaClient.TopicMetadata topicMeta =
+                client.getTopicMetadataCache().get(topic);
+
+        if (topicMeta == null) {
+            throw new IOException("Topic not found: " + topic
+                    + ". Create it first with client.createTopic()");
+        }
+        return topicMeta;
+    }
+
+    // ─────────────────────────────────────────────
+    // MAIN — standalone demo
     // ─────────────────────────────────────────────
 
     /**
@@ -207,31 +231,26 @@ public class SimpleKafkaProducer {
      *        com.simplekafka.client.SimpleKafkaProducer \
      *        localhost 9091 test-topic
      */
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         String host  = args.length > 0 ? args[0] : "localhost";
         int    port  = args.length > 1 ? Integer.parseInt(args[1]) : 9091;
         String topic = args.length > 2 ? args[2] : "test-topic";
 
-        System.out.println("SimpleKafkaProducer starting...");
-        System.out.println("  Broker    : " + host + ":" + port);
-        System.out.println("  Topic     : " + topic);
-        System.out.println("  Partitions: " + DEFAULT_NUM_PARTITIONS);
+        System.out.println("=== SimpleKafkaProducer ===");
+        System.out.println("Broker: " + host + ":" + port + "  Topic: " + topic);
 
-        try {
-            SimpleKafkaProducer producer = new SimpleKafkaProducer(
-                    host, port, topic, DEFAULT_NUM_PARTITIONS);
+        SimpleKafkaProducer producer = new SimpleKafkaProducer(host, port, topic);
+        producer.initialize();
 
-            producer.start();
-
-            // Clean shutdown on Ctrl+C
-            Runtime.getRuntime().addShutdownHook(new Thread(() ->
-                    System.out.println("\nShutting down producer...")));
-
-            producer.startSendLoop();
-
-        } catch (Exception e) {
-            System.err.println("Producer failed: " + e.getMessage());
-            e.printStackTrace();
+        // Send 10 messages — partition chosen randomly each time
+        for (int i = 0; i < 10; i++) {
+            String message = "message-" + i;
+            long offset = producer.send(message);
+            System.out.println("[SENT] \"" + message + "\" -> offset " + offset);
+            Thread.sleep(500);
         }
+
+        producer.close();
+        System.out.println("Done.");
     }
 }
