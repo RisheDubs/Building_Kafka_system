@@ -2,7 +2,7 @@ C:\Users\RadiumPCs\Documents\Projects\Building_Kafka_system_from_scratch\src\mai
 C:\Users\RadiumPCs\Documents\Projects\Building_Kafka_system_from_scratch\src\main\java\com\simplekafka\broker\Partition.java
 C:\Users\RadiumPCs\Documents\Projects\Building_Kafka_system_from_scratch\src\main\java\com\simplekafka\broker\Protocol.java
 C:\Users\RadiumPCs\Documents\Projects\Building_Kafka_system_from_scratch\src\main\java\com\simplekafka\broker\SimpleKafkaBroker.java
-C:\Users\RadiumPCs\Documents\Projects\Building_Kafka_system_from_scratch\src\main\java\com\simplekafka\broker\ZookeeperClient.java
+C:\Users\RadiumPCs\Documents\Projects\Building_Kafka_system_from_scratch\src\main\java\com\simplekafka\broker\ZooKeeperClient.java
 C:\Users\RadiumPCs\Documents\Projects\Building_Kafka_system_from_scratch\src\main\java\com\simplekafka\client\SimpleKafkaClient.java
 C:\Users\RadiumPCs\Documents\Projects\Building_Kafka_system_from_scratch\src\main\java\com\simplekafka\client\SimpleKafkaConsumer.java
 C:\Users\RadiumPCs\Documents\Projects\Building_Kafka_system_from_scratch\src\main\java\com\simplekafka\client\SimpleKafkaProducer.java
