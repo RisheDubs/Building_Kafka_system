@@ -1043,7 +1043,13 @@ public class SimpleKafkaBroker {
 
     public static void main(String[] args) {
         try {
-            SimpleKafkaBroker broker = new SimpleKafkaBroker(1, "localhost", 9092, 2181);
+            int brokerId = Integer.parseInt(args[0]);
+            String host  = args[1];
+            int port     = Integer.parseInt(args[2]);
+            int zkPort   = Integer.parseInt(args[3]);
+
+            SimpleKafkaBroker broker = new SimpleKafkaBroker(brokerId, host, port, zkPort);
+
             broker.start();
 
             // Keep running until Ctrl+C
