@@ -242,7 +242,7 @@ public class ZooKeeperClient implements Watcher {
                 }
             });
             // Initial state: callback fires immediately with current existence
-            callback.onNodeChanged(stat != null);
+            //callback.onNodeChanged(stat != null); <-bug
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Failed to watch node: " + path, e);
         }
