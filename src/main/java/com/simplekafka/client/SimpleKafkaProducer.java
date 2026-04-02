@@ -158,7 +158,7 @@ public class SimpleKafkaProducer {
         producer.client.createTopic(topic, DEFAULT_NUM_PARTITIONS, DEFAULT_REPLICATION_FACTOR);
 
         // Give the broker time to register the topic before fetching metadata
-        Thread.sleep(2000);
+        Thread.sleep(3000);
 
         for (int i = 0; i < 10; i++) {
             String message = "message-" + i;
